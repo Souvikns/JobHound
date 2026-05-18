@@ -2,6 +2,7 @@
   "name": "jobhound",
   "private": true,
   "scripts": {
+    "install:all": "bun install && turbo run install",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
