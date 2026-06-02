@@ -1,0 +1,19 @@
+[project]
+name = "wellfound"
+version = "0.1.0"
+description = "automater for wellfound jobs applying"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "colorlog>=6.10.1",
+    "curl-cffi>=0.15.0",
+    "google-api-python-client>=2.196.0",
+    "google-auth-httplib2>=0.4.0",
+    "google-auth-oauthlib>=1.4.0",
+    "pdfplumber>=0.11.9",
+    "pydantic>=2.13.4",
+    "pymupdf>=1.27.2.3",
+    "pypdf>=6.11.0",
+    "python-dotenv>=1.2.2",
+    "requests>=2.34.0",
+]
