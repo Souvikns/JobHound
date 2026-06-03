@@ -231,9 +231,6 @@ def extractDocument(filepath: str) -> str:
 
 
 
-
-
-
 def ollama_cloud_chat(user_prompt: str, system_prompt: str, api_key: str, model: str = "gpt-oss:120b-cloud") -> str:
     try:
         r = requests.post(
@@ -264,6 +261,35 @@ def ollama_cloud_chat(user_prompt: str, system_prompt: str, api_key: str, model:
         raise
     except Exception as e:
         raise LLMError(f"LLM request failed: {e}") from e
+
+
+def score_cv_jd_match(cv: str, job_desc: str, api_key: str) -> MatchResult:
+    user_prompt = f"""## CV (Markdown)
+{cv}
+
+## Job Description
+{job_desc}
+
+Evaluate the match and respond with the JSON object.
+        """
+    raw = ollama_cloud_chat(
+        user_prompt=user_prompt,
+        system_prompt=SCORESYS_SYSTEM_PROMPT,
+        api_key=api_key,
+    )
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"LLM returned non-JSON response: {e}\nRaw: {raw}") from e
+
+    return MatchResult(
+        score=int(data["score"]),
+        reasoning=data["reasoning"],
+        strengths=data.get("strengths", []),
+        gaps=data.get("gaps", []),
+    )
 
 
 def getJobResponses(questions: list[JobApplicationQuestion], resumeContents: str, jobDesc: str) -> list[dict]:
@@ -421,6 +447,7 @@ async def runBot(role: str, location: str | None = None, maxPages : int = 5):
     locationName = location if (location != None) else "Worldwide"
     print(f"Gonna run Bot for role: {role}, with location: {locationName} for: MAX {maxPages} pages")
 
+    #get jobs list 
     jobs = await getJobs(roleId= role_id, locationId= location_id, maxPages=maxPages, roleName=role, locationName=location)
     extractJobEmails(jobs)
     log.info(f"found {len(jobs)} jobs for role='{role}', location='{location or 'worldwide'}'...")
@@ -446,7 +473,19 @@ async def runBot(role: str, location: str | None = None, maxPages : int = 5):
             log.info("status: already applied (job detail), skipping...")
             continue
 
-        log.info("generating responses...")
+    #guardrails: if jd is completely bollocks or unrelated to resume, why even apply? skip 
+        log.info("ATS evaluation for this role...")
+        scoreATS = score_cv_jd_match(resumeContents, job.description, api_key=OLLAMA_API_KEY)
+        log.info("-" * 20)
+
+        if scoreATS.score < PASSING_SCORE_ATS:
+            log.info(f"[SKIP] score {scoreATS.score} below threshold {PASSING_SCORE_ATS}. \nTop gaps: {', '.join(scoreATS.gaps[:3]) or 'n/a'}")
+            continue
+
+        log.info(f"[PASS] proceeding with application. Strengths: {', '.join(scoreATS.strengths[:3]) or 'n/a'}")
+
+    #responses for the questions list asked for the role
+        log.info("\ngenerating responses...")
         try:
             responses: list[JobQuestionAnswer] = jobQuestionsAnswered(
                 question_sets=jobInfo.applicationQuestionSets,
@@ -479,6 +518,7 @@ async def runBot(role: str, location: str | None = None, maxPages : int = 5):
         startupId = job.companyId or ""
         jobId = job.id
 
+    #apply with the answers filled
         log.info("submitting application...")
         try:
             apply_status = await applyJob(

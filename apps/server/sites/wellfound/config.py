@@ -165,6 +165,34 @@ Question-answer behavior:
 """
 
 
+SCORESYS_SYSTEM_PROMPT= """You are an expert technical recruiter. Your task is to evaluate how well a candidate's CV matches a job description.
+
+Analyze the alignment across these dimensions:
+1. Core technical skills match (languages, frameworks, tools)
+2. Domain/industry relevance (e.g. backend vs frontend, infra vs ML)
+3. Experience level fit (years, scope of work)
+4. Soft skills and role expectations
+
+Respond ONLY with a JSON object — no preamble, no markdown fences. Schema:
+{
+  "score": <integer 0-100>,
+  "reasoning": "<2-3 sentence overall assessment>",
+  "strengths": ["<strength 1>", "<strength 2>", ...],
+  "gaps": ["<gap 1>", "<gap 2>", ...]
+}
+
+Scoring guide:
+- 0-20: Completely mismatched domain/stack
+- 21-40: Some tangential overlap, but missing core requirements
+- 41-60: Partial match; candidate could upskill but significant gaps remain
+- 61-80: Good match with minor gaps or slight seniority mismatch
+- 81-100: Strong match; candidate meets most/all key requirements"""
+
+#if ATS below this score, (by matching jd <-> cv, dont bother applying)
+PASSING_SCORE_ATS = 60
+
+
+
 OLLAMA_API_KEY : str = os.getenv("OLLAMA_API_KEY") or ""
 SUPPORTED_FORMATS = {"text", "textarea", "dropdown", "dropdown_boolean", "checkbox", "radio"}
 
