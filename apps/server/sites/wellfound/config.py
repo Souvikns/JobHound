@@ -13,9 +13,56 @@ load_dotenv()
 WF_URL = "https://wellfound.com/graphql"
 _config_dir = Path(__file__).parent / "config"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Referer": "https://wellfound.com/jobs",
+    "content-type": "application/json",
+    "x-requested-with": "XMLHttpRequest",
+    "x-original-referer": "https://accounts.google.com/",
+    "apollographql-client-name": "talent-web",
+    "x-apollo-operation-name": "JobSearchResultsX",
+    "x-angellist-dd-client-referrer-resource": "/jobs",
+    "Origin": "https://wellfound.com",
+    "Sec-GPC": "1",
+    "Alt-Used": "wellfound.com",
+    "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "same-origin",
+    "Sec-Fetch-Site": "same-origin",
+    "Priority": "u=4",
+    "TE": "trailers"
+}
+
+SESSION_CONF_TEMPLATE = {
+    "headers": {
+        "x-apollo-signature": "",
+        "x-wf-cfp": ""
+    },
+    "cookies": {
+        "_wellfound": "",
+        "cf_clearance": "",
+        "datadome": "",
+        "TAsessionID": "",
+        "wellfound_default_consent": "",
+        "g_state": "",
+        "ajs_anonymous_id": "",
+        "_ga_705F94181H": "",
+        "_ga": "",
+        "ajs_user_id": "",
+        "notice_behavior": ""
+    }
+}
+
 
 def _load_headers_and_cookies() -> tuple[dict, dict]:
-    static_headers = json.loads((_config_dir / "headers.json").read_text())
+    sessionPath = _config_dir / "session.json"
+    if not os.path.isfile(sessionPath):
+        print("session is not defined! run update-session first!")
+        exit(1)
+    static_headers = HEADERS 
     session = json.loads((_config_dir / "session.json").read_text())
     headers = {**static_headers, **session["headers"]}
     cookies = session["cookies"]
@@ -28,7 +75,7 @@ def update_session_from_curl(curl: str) -> None:
         raise ValueError("invalid input: must be a curl command starting with 'curl '")
 
     session_path = _config_dir / "session.json"
-    session = json.loads(session_path.read_text())
+    session = SESSION_CONF_TEMPLATE 
 
     headers_updated = []
     cookies_updated = []
@@ -63,16 +110,12 @@ def update_session_from_curl(curl: str) -> None:
 
     if not headers_updated and not cookies_updated:
         raise ValueError(
-            "curl parsed but nothing matched session.json — "
+            "curl parsed but nothing matched session.json"
             "no known headers or cookies found. is this the right request?"
         )
 
     session_path.write_text(json.dumps(session, indent=4))
     print(f"\nsession.json updated ({len(headers_updated)} headers, {len(cookies_updated)} cookies)")
-
-
-
-WF_HEADERS, WF_COOKIES = _load_headers_and_cookies()
 
 
 
@@ -138,8 +181,13 @@ LOCATION_IDS: dict[str, str] = {
     "india": "1647",
 }
 
+
 if __name__ == "__main__":
     if sys.argv[1] == "update_session":
         print(_config_dir)
         curl_input = pyperclip.paste()
+        os.makedirs(_config_dir, exist_ok=True)
         update_session_from_curl(curl_input)
+else:
+    #load from config if not in update-session mode
+    WF_HEADERS, WF_COOKIES = _load_headers_and_cookies()
