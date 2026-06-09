@@ -279,19 +279,40 @@ Evaluate the match and respond with the JSON object.
     )
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
 
+    _ones = {
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+        "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    }
+    _tens = {
+        "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+        "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    }
+
+    def _words_to_int(text: str) -> int:
+        words = text.lower().split()
+        if words == ["one", "hundred"] or words == ["hundred"]:
+            return 100
+        if len(words) == 1:
+            return _ones.get(words[0]) or _tens.get(words[0]) or 50
+        if len(words) == 2 and words[0] in _tens and words[1] in _ones:
+            return _tens[words[0]] + _ones[words[1]]
+        return 50  # unrecognised — neutral fallback
+
+    cleaned = re.sub(
+        r'("score"\s*:\s*)([A-Za-z]+(?:\s+[A-Za-z]+)?)',
+        lambda m: m.group(1) + str(min(_words_to_int(m.group(2)), 100)),
+        cleaned,
+    )
+
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM returned non-JSON response: {e}\nRaw: {raw}") from e
 
-    raw_score = data["score"]
-    try:
-        score = int(raw_score)
-    except (ValueError, TypeError):
-        raise ValueError(f"LLM returned non-integer score: {raw_score!r}")
-
     return MatchResult(
-        score=score,
+        score=int(data["score"]),
         reasoning=data["reasoning"],
         strengths=data.get("strengths", []),
         gaps=data.get("gaps", []),
