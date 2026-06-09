@@ -63,7 +63,7 @@ def setup_logging() -> logging.Logger:
 
 
 
-async def getJobs(roleId: str, roleName: str = "", locationId: Optional[str] = None, locationName: str | None = "", maxPages: int = 10) -> list[JobListing]:
+async def getJobs(roleId: str, roleName: str = "", locationId: Optional[str] = None, locationName: str | None = "", maxPages: int = 10, yoeMin: Optional[int] = None, yoeMax: Optional[int] = None) -> list[JobListing]:
     jobs: list[JobListing] = []
     sess = get_session()
     for page in range(1, maxPages + 1):
@@ -79,7 +79,7 @@ async def getJobs(roleId: str, roleName: str = "", locationId: Optional[str] = N
             "jobTypes": ["full_time", "contract"],
             "remotePreference": "REMOTE_OPEN",
             "salary": {"min": None, "max": None},
-            "yearsExperience": {"min": None, "max": None},
+            "yearsExperience": {"min": yoeMin, "max": yoeMax},
         }
         if locationId is not None:
             filter_input["locationTagIds"] = [locationId]
@@ -284,8 +284,14 @@ Evaluate the match and respond with the JSON object.
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM returned non-JSON response: {e}\nRaw: {raw}") from e
 
+    raw_score = data["score"]
+    try:
+        score = int(raw_score)
+    except (ValueError, TypeError):
+        raise ValueError(f"LLM returned non-integer score: {raw_score!r}")
+
     return MatchResult(
-        score=int(data["score"]),
+        score=score,
         reasoning=data["reasoning"],
         strengths=data.get("strengths", []),
         gaps=data.get("gaps", []),
@@ -428,7 +434,7 @@ def extractJobEmails(jobs: list[JobListing]) -> None:
     log.info(f"wrote {len(matches)} email(s) to {email_path}")
 
 
-async def runBot(role: str, location: str | None = None, maxPages : int = 5):
+async def runBot(role: str, location: str | None = None, maxPages: int = 5, yoeMin: Optional[int] = None, yoeMax: Optional[int] = None):
     #input parsing
     role_id = ROLE_IDS.get(role.lower())
     if role_id is None:
@@ -445,10 +451,11 @@ async def runBot(role: str, location: str | None = None, maxPages : int = 5):
             return
     
     locationName = location if (location != None) else "Worldwide"
-    print(f"Gonna run Bot for role: {role}, with location: {locationName} for: MAX {maxPages} pages")
+    yoe_str = f"yoe {yoeMin}-{yoeMax}" if (yoeMin is not None or yoeMax is not None) else "any yoe"
+    print(f"Gonna run Bot for role: {role}, with location: {locationName}, {yoe_str}, for: MAX {maxPages} pages")
 
-    #get jobs list 
-    jobs = await getJobs(roleId= role_id, locationId= location_id, maxPages=maxPages, roleName=role, locationName=location)
+    #get jobs list
+    jobs = await getJobs(roleId=role_id, locationId=location_id, maxPages=maxPages, roleName=role, locationName=location, yoeMin=yoeMin, yoeMax=yoeMax)
     extractJobEmails(jobs)
     log.info(f"found {len(jobs)} jobs for role='{role}', location='{location or 'worldwide'}'...")
 
@@ -543,6 +550,8 @@ async def main():
     parser.add_argument("--role", required=True, help=f"role to apply for. options: {', '.join(ROLE_IDS.keys())}")
     parser.add_argument("--location", default=None, help=f"location filter. options: {', '.join(LOCATION_IDS.keys())} (default: worldwide)")
     parser.add_argument("--maxpages", type=int, default=10, help="max pages to fetch (default: 10)")
+    parser.add_argument("--yoe-min", type=int, default=None, help="minimum years of experience filter (default: no minimum)")
+    parser.add_argument("--yoe-max", type=int, default=None, help="maximum years of experience filter (default: no maximum)")
     parser.add_argument("--emails-mode", action="store_true", help="only extract emails from job descriptions, skip applying")
     args = parser.parse_args()
 
@@ -558,11 +567,11 @@ async def main():
                 if location_id is None:
                     log.error(f"unknown location '{args.location}'. available: {', '.join(LOCATION_IDS.keys())}")
                     raise SystemExit(1)
-            jobs = await getJobs(roleId=role_id, locationId=location_id, maxPages=args.maxpages, roleName=args.role, locationName=args.location)
+            jobs = await getJobs(roleId=role_id, locationId=location_id, maxPages=args.maxpages, roleName=args.role, locationName=args.location, yoeMin=args.yoe_min, yoeMax=args.yoe_max)
             log.info(f"found {len(jobs)} jobs, extracting emails only...")
             extractJobEmails(jobs)
         else:
-            await runBot(role=args.role, location=args.location, maxPages=args.maxpages)
+            await runBot(role=args.role, location=args.location, maxPages=args.maxpages, yoeMin=args.yoe_min, yoeMax=args.yoe_max)
     except (LLMError, SessionExpiredError) as e:
         log.error(f"fatal error, stopping: {e}")
         raise SystemExit(1)
