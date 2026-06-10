@@ -181,6 +181,8 @@ Respond ONLY with a JSON object — no preamble, no markdown fences. Schema:
   "gaps": ["<gap 1>", "<gap 2>", ...]
 }
 
+IMPORTANT: "score" must be a plain integer (e.g. 52), never a word or string (e.g. never "fifty two" or "52").
+
 Scoring guide:
 - 0-20: Completely mismatched domain/stack
 - 21-40: Some tangential overlap, but missing core requirements
